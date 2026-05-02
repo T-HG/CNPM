@@ -76,11 +76,19 @@ export default function Sales() {
   
   const filteredMedicines = useMemo(() => {
     const keyword = searchQuery.trim().toLowerCase()
-    return medicines.filter(
-      (med) =>
-        med.name.toLowerCase().includes(keyword) ||
-        med.id.toLowerCase().includes(keyword)
-    )
+    if (!keyword) return medicines
+    return medicines.filter((med) => {
+      const name = (med.name || '').toLowerCase()
+      const id = (med.id || '').toLowerCase()
+      const ingredient = (med.ingredient || '').toLowerCase()
+      const drugCode = (med.drugCode || '').toLowerCase()
+      return (
+        name.includes(keyword) ||
+        id.includes(keyword) ||
+        ingredient.includes(keyword) ||
+        drugCode.includes(keyword)
+      )
+    })
   }, [searchQuery, medicines])
 
   const cartQtyByMedicine = useMemo(() => {
@@ -247,7 +255,7 @@ export default function Sales() {
             <FaSearch className="text-slate-400" />
             <input
               type="text"
-              placeholder="Tìm thuốc theo mã hoặc tên sản phẩm..."
+              placeholder="Tìm theo tên, mã, số đăng ký hoặc thành phần..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-transparent text-sm text-slate-700 outline-none"

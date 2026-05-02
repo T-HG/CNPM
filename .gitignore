@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# CSDL SQLite local (import/seed tạo lại)
+backend/database/*.sqlite
+
 # Env / secrets (dùng .env.example làm mẫu)
 .env
 .env.*

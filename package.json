@@ -10,6 +10,7 @@
     "db:seed": "node backend/database/seed.js",
     "db:inspect": "node backend/database/inspectDb.js",
     "db:import-medicines": "node backend/database/importMedicinesCsv.js",
+    "db:import-medicines-fresh": "node backend/database/importMedicinesCsv.js --fresh",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

@@ -2,8 +2,11 @@ import {
   createCategory,
   createMedicine,
   findMedicine,
+  findMedicineIdByNameAndUnit,
+  increaseStock,
   listCategories,
   listMedicines,
+  removeMedicine,
   updateStock,
 } from '../models/MedicineModel.js'
 import { createError } from '../utils/http.js'
@@ -21,15 +24,42 @@ export async function getMedicine(req, res) {
 
 export async function postMedicine(req, res) {
   const medicines = await listMedicines()
-  const payload = {
-    ...req.body,
-    id: req.body.id || nextCode('SP', medicines.length + 1),
-    type: req.body.type || 'Thuốc không kê đơn',
-    unit: req.body.unit || 'Viên',
+  const body = req.body
+  const name = (body.name || '').trim()
+  if (!name) {
+    throw createError(400, 'Tên thuốc là bắt buộc')
   }
 
-  if (!payload.name) {
-    throw createError(400, 'Tên thuốc là bắt buộc')
+  const type = body.type || 'Thuốc không kê đơn'
+  const unit = (body.unit || 'Viên').trim() || 'Viên'
+  const addQty = Number(body.stock ?? 0)
+  if (Number.isNaN(addQty) || addQty < 0) {
+    throw createError(400, 'Số lượng tồn không hợp lệ')
+  }
+
+  const idFromClient = typeof body.id === 'string' ? body.id.trim() : body.id ? String(body.id).trim() : ''
+
+  if (idFromClient) {
+    const byId = await findMedicine(idFromClient)
+    if (byId) {
+      if (addQty > 0) await increaseStock(idFromClient, addQty)
+      return res.status(200).json(await findMedicine(idFromClient))
+    }
+  }
+
+  const dupId = await findMedicineIdByNameAndUnit(name, unit)
+  if (dupId) {
+    if (addQty > 0) await increaseStock(dupId, addQty)
+    return res.status(200).json(await findMedicine(dupId))
+  }
+
+  const payload = {
+    ...body,
+    name,
+    id: idFromClient || nextCode('SP', medicines.length + 1),
+    type,
+    unit,
+    stock: addQty,
   }
 
   const created = await createMedicine(payload)
@@ -46,6 +76,20 @@ export async function patchMedicineStock(req, res) {
   const medicine = await updateStock(req.params.id, nextStock)
   if (!medicine) throw createError(404, 'Không tìm thấy thuốc')
   res.json(medicine)
+}
+
+export async function deleteMedicine(req, res) {
+  const outcome = await removeMedicine(req.params.id)
+  if (!outcome.removed && outcome.reason === 'NOT_FOUND') {
+    throw createError(404, 'Không tìm thấy thuốc')
+  }
+  if (!outcome.removed && outcome.reason === 'HAS_SALES_HISTORY') {
+    throw createError(
+      409,
+      'Không thể xóa thuốc đã có trong lịch sử bán hàng. Ngừng kinh doanh thay cho xóa nếu cần.',
+    )
+  }
+  res.status(204).send()
 }
 
 export async function getCategories(req, res) {

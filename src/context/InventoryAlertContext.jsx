@@ -234,11 +234,10 @@ export function InventoryAlertProvider({ children }) {
   const addMedicine = useCallback(
     async (payload) => {
       const response = await api.post('/medicines', payload)
-      setMedicines((prev) => [normalizeMedicine(response.data), ...prev])
-      setUpdatedAt(new Date().toISOString())
+      await refreshData()
       return response.data
     },
-    [],
+    [refreshData],
   )
 
   const updateEmployeeRole = useCallback(
@@ -266,6 +265,11 @@ export function InventoryAlertProvider({ children }) {
     () => notifications.filter((item) => item.targetRole === 'admin').slice(0, 10),
     [notifications],
   )
+
+  const deleteMedicine = useCallback(async (medicineId) => {
+    await api.post(`/medicines/${encodeURIComponent(medicineId)}/delete`)
+    await refreshData()
+  }, [refreshData])
 
   const value = useMemo(
     () => ({
@@ -295,6 +299,7 @@ export function InventoryAlertProvider({ children }) {
       updateEmployeeRole,
       toggleEmployeeStatus,
       formatDateTime,
+      deleteMedicine,
     }),
     [
       adminNotifications,
@@ -321,6 +326,7 @@ export function InventoryAlertProvider({ children }) {
       addMedicine,
       updateEmployeeRole,
       toggleEmployeeStatus,
+      deleteMedicine,
     ],
   )
 

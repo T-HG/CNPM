@@ -1,7 +1,17 @@
 import axios from 'axios'
 
+/** Chuẩn hóa base (tránh nhầm `http://localhost:5055` thiếu `/api`). */
+function resolveApiBase() {
+  const raw = import.meta.env.VITE_API_URL
+  if (raw != null && String(raw).trim() !== '') {
+    const trimmed = String(raw).trim().replace(/\/+$/, '')
+    return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`
+  }
+  return '/api'
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5055/api',
+  baseURL: resolveApiBase(),
 })
 
 api.interceptors.request.use((config) => {

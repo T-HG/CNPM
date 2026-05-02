@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import {
-  FaPlus,
   FaFileExport,
+  FaPlus,
   FaSearch,
   FaTimes,
+  FaTrash,
 } from 'react-icons/fa'
 import { useInventoryAlerts } from '../../context/InventoryAlertContext'
 import { useSetPageHeader } from '../../context/PageHeaderContext'
+import { getApiError } from '../../services/api'
 
 const ALL_GROUP_OPTION = 'Tất cả'
 
@@ -21,11 +23,17 @@ export default function Medicines() {
     'Quản lý danh mục thuốc, tồn kho, giá bán và thông tin chi tiết',
   )
 
-  const { medicines, medicineCategories, addMedicine } = useInventoryAlerts()
+  const { medicines, medicineCategories, addMedicine, deleteMedicine } = useInventoryAlerts()
   const [search, setSearch] = useState('')
   const [selectedTypes] = useState([])
   const [selectedGroup, setSelectedGroup] = useState(ALL_GROUP_OPTION)
   const [showModal, setShowModal] = useState(false)
+
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    isOpen: false,
+    id: null,
+    name: '',
+  })
   
   // State quản lý Tab đang mở (info / details)
   const [activeTab, setActiveTab] = useState('info')
@@ -118,7 +126,7 @@ export default function Medicines() {
     }
 
     const newItem = {
-      id: formData.code || `SP${String(medicines.length + 29).padStart(6, '0')}`,
+      ...(formData.code?.trim() ? { id: formData.code.trim() } : {}),
       name: formData.name,
       unit: formData.unit || 'Chưa xác định',
       type: formData.type,
@@ -152,6 +160,20 @@ export default function Medicines() {
       handleCloseModal()
     } catch (error) {
       alert(error?.response?.data?.message || 'Không thể lưu thuốc vào database')
+    }
+  }
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirm({ isOpen: false, id: null, name: '' })
+  }
+
+  const confirmDeleteMedicine = async () => {
+    if (!deleteConfirm.id) return
+    try {
+      await deleteMedicine(deleteConfirm.id)
+      closeDeleteConfirm()
+    } catch (error) {
+      alert(getApiError(error, 'Không xóa được thuốc.'))
     }
   }
 
@@ -293,6 +315,7 @@ export default function Medicines() {
                   <th className="whitespace-nowrap p-4 text-right">Giá vốn</th>
                   <th className="whitespace-nowrap p-4 text-right">Giá bán</th>
                   <th className="whitespace-nowrap p-4">Loại hàng</th>
+                  <th className="whitespace-nowrap p-4 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -307,15 +330,34 @@ export default function Medicines() {
                         {formatMoney(item.salePrice)}
                       </td>
                       <td className="p-4">
-                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${item.type === 'Thuốc kê đơn' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                        <span
+                          className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                            item.type === 'Thuốc kê đơn'
+                              ? 'bg-orange-50 text-orange-600'
+                              : 'bg-emerald-50 text-emerald-600'
+                          }`}
+                        >
                           {item.type}
                         </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteConfirm({ isOpen: true, id: item.id, name: item.name })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+                          title="Xóa khỏi danh mục"
+                        >
+                          <FaTrash />
+                          Xóa
+                        </button>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="p-10 text-center text-slate-400">
+                    <td colSpan="7" className="p-10 text-center text-slate-400">
                       Không có dữ liệu phù hợp
                     </td>
                   </tr>
@@ -542,6 +584,36 @@ export default function Medicines() {
                 className="rounded-2xl bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/30"
               >
                 Lưu thuốc
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm.isOpen && deleteConfirm.id && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900">Xác nhận xóa thuốc</h3>
+            <p className="mt-3 text-sm text-slate-600">
+              Bạn có chắc muốn xóa thuốc{' '}
+              <span className="font-semibold text-slate-900">{deleteConfirm.name}</span> (mã{' '}
+              <span className="font-mono text-slate-800">{deleteConfirm.id}</span>)? Hành động này không
+              hoàn tác. Thuốc đã từng xuất hiện trên hóa đơn bán sẽ không thể xóa.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeDeleteConfirm}
+                className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteMedicine}
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Xóa thuốc
               </button>
             </div>
           </div>

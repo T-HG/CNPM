@@ -3,7 +3,19 @@ import path from 'node:path'
 import { run } from '../config/database.js'
 import { initDatabase } from './init.js'
 
-const csvPath = process.argv[2]
+/** Xóa toàn bộ thuốc + danh mục và hóa đơn bán liên quan (dòng chi tiết chứa MedicineId không xó được nếu còn hóa đơn). */
+async function wipeMedicineCatalogBeforeImport() {
+  await run('DELETE FROM SalesInvoiceLine')
+  await run('DELETE FROM SalesInvoice')
+  await run('DELETE FROM Medicine')
+  await run('DELETE FROM MedicineCategory')
+}
+
+function parseCliArgs(argv) {
+  const fresh = argv.includes('--fresh')
+  const csvPath = argv.find((a) => !a.startsWith('-'))
+  return { csvPath, fresh }
+}
 
 function parseCsvLine(line) {
   const values = []
@@ -56,8 +68,12 @@ function nextCategoryId(index) {
 }
 
 async function importMedicines() {
+  const argv = process.argv.slice(2)
+  const { csvPath, fresh } = parseCliArgs(argv)
   if (!csvPath) {
-    throw new Error('Vui lòng truyền đường dẫn file CSV. Ví dụ: node backend/database/importMedicinesCsv.js C:\\path\\medicine_ready.csv')
+    throw new Error(
+      'Vui lòng truyền đường dẫn file CSV. Ví dụ:\n  node backend/database/importMedicinesCsv.js path\\medicine.csv\n  node backend/database/importMedicinesCsv.js --fresh path\\medicine.csv  (xoá thuốc + hóa đơn cũ, rồi import)',
+    )
   }
 
   const absoluteCsvPath = path.resolve(csvPath)
@@ -70,6 +86,12 @@ async function importMedicines() {
   await run('BEGIN TRANSACTION')
 
   try {
+    if (fresh) {
+      console.log('--fresh: đang xoá chi tiết hóa đơn → hóa đơn → thuốc → danh mục thuốc…')
+      await wipeMedicineCatalogBeforeImport()
+      console.log('--fresh: xoá xong.')
+    }
+
     for (const row of rows) {
       const categoryName = row.CategoryId || 'Chưa phân loại'
       if (!categoryMap.has(categoryName)) {
@@ -126,7 +148,8 @@ async function importMedicines() {
     }
 
     await run('COMMIT')
-    console.log(`Import thành công ${insertedMedicines} thuốc từ ${absoluteCsvPath}`)
+    const prefix = fresh ? '[Làm mới hoàn chỉnh] ' : ''
+    console.log(`${prefix}Import thành công ${insertedMedicines} thuốc từ ${absoluteCsvPath}`)
     console.log(`Số danh mục phát hiện: ${categoryMap.size}`)
     console.log('Tồn kho mặc định cho thuốc mới: 0')
   } catch (error) {

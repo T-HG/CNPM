@@ -42,6 +42,23 @@ export function findMedicine(id) {
   return get(`${medicineSelect} WHERE m.MedicineId = ?`, [id])
 }
 
+/** Một dòng đại diện khi trùng tên + đơn vị (chuẩn hóa trim, không phân biệt hoa thường). */
+export async function findMedicineIdByNameAndUnit(name, unit) {
+  const n = (name || '').trim()
+  if (!n) return null
+  const u = (unit || '').trim()
+  const row = await get(
+    `SELECT m.MedicineId AS id
+     FROM Medicine m
+     WHERE LOWER(TRIM(m.MedicineName)) = LOWER(?)
+       AND LOWER(TRIM(COALESCE(m.UnitName, ''))) = LOWER(?)
+     ORDER BY m.MedicineId ASC
+     LIMIT 1`,
+    [n, u],
+  )
+  return row?.id ?? null
+}
+
 export async function createMedicine(payload) {
   await run(
     `INSERT INTO Medicine
@@ -120,4 +137,18 @@ export async function createCategory(payload) {
   return get('SELECT CategoryId AS id, CategoryName AS name FROM MedicineCategory WHERE CategoryId = ?', [
     payload.id,
   ])
+}
+
+/** Không xóa nếu thuốc đã có trong phiếu bán (SalesInvoiceLine). Tồn kho & cảnh báo xóa theo CASCADE. */
+export async function removeMedicine(medicineId) {
+  const exists = await get('SELECT 1 AS ok FROM Medicine WHERE MedicineId = ?', [medicineId])
+  if (!exists) return { removed: false, reason: 'NOT_FOUND' }
+
+  const hasSales = await get('SELECT 1 AS ok FROM SalesInvoiceLine WHERE MedicineId = ? LIMIT 1', [
+    medicineId,
+  ])
+  if (hasSales) return { removed: false, reason: 'HAS_SALES_HISTORY' }
+
+  await run('DELETE FROM Medicine WHERE MedicineId = ?', [medicineId])
+  return { removed: true }
 }
