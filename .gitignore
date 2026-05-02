@@ -17,9 +17,6 @@ dist-ssr
 .env.*
 !.env.example
 
-# SQLite cục bộ — tái tạo bằng npm run db:seed hoặc import
-backend/database/*.sqlite
-
 .cursor/
 
 # Editor directories and files
