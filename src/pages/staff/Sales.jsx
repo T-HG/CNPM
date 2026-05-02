@@ -26,17 +26,18 @@ const generateInvoiceId = () => `HD${Math.floor(100000 + Math.random() * 900000)
 export default function Sales() {
   useSetPageHeader('Bán hàng tại quầy', 'Tìm kiếm sản phẩm và thanh toán nhanh chóng')
   const { medicines: inventoryMedicines, addOrder, consumeStock } = useInventoryAlerts()
-  const medicines = useMemo(
-    () =>
-      inventoryMedicines.map((item) => ({
-        ...item,
-        price: Number(item.salePrice || item.price || 0),
-        category: item.category || 'Khác',
-        ingredient: item.ingredient || 'Chưa cập nhật',
-        usage: item.usage || 'Chưa cập nhật',
-      })),
-    [inventoryMedicines],
-  )
+  const medicines = useMemo(() => {
+    const sorted = [...inventoryMedicines].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'vi', { sensitivity: 'base' }),
+    )
+    return sorted.map((item) => ({
+      ...item,
+      price: Number(item.salePrice || item.price || 0),
+      category: item.category || 'Khác',
+      ingredient: item.ingredient || 'Chưa cập nhật',
+      usage: item.usage || 'Chưa cập nhật',
+    }))
+  }, [inventoryMedicines])
   const [searchQuery, setSearchQuery] = useState('')
   const [cart, setCart] = useState([])
   

@@ -17,9 +17,7 @@ router.post('/categories', asyncHandler(postCategory))
 router.get('/', asyncHandler(getMedicines))
 router.post('/', asyncHandler(postMedicine))
 router.patch('/:id/stock', asyncHandler(patchMedicineStock))
-// POST thay vì DELETE — một số proxy / môi trường không chuyển DELETE → 404 giả
 router.post('/:id/delete', asyncHandler(deleteMedicine))
-router.delete('/:id', asyncHandler(deleteMedicine))
 router.get('/:id', asyncHandler(getMedicine))
 
 export default router
