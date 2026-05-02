@@ -10,12 +10,20 @@ Backend dùng Express + SQLite, tổ chức theo mô hình MVC:
 
 ## Chạy backend
 
+Từ thư mục gốc project (cùng cấp `package.json`):
+
+```bash
+npm run server
+```
+
+File `backend/database/pharmacy.sqlite` đã có trong repo — **không bắt buộc** chạy `db:seed` sau khi clone. Chỉ chạy seed khi muốn reset về dữ liệu mẫu:
+
 ```bash
 npm run db:seed
 npm run server
 ```
 
-API chạy tại `http://localhost:5055`.
+API chạy tại `http://localhost:5055`. Chạy full stack (API + React): `npm start` ở thư mục gốc.
 
 Tài khoản mẫu:
 
@@ -41,4 +49,4 @@ Tài khoản mẫu:
 
 ## Ghi chú schema
 
-SQLite không có kiểu `nvarchar`/`decimal` thực sự như SQL Server, nhưng schema vẫn giữ tên kiểu tương ứng để bám sát sơ đồ. Database file mặc định được tạo ở `backend/database/pharmacy.sqlite`.
+SQLite không có kiểu `nvarchar`/`decimal` thực sự như SQL Server, nhưng schema vẫn giữ tên kiểu tương ứng để bám sát sơ đồ. Database file mặc định: `backend/database/pharmacy.sqlite` (được commit trong repo để clone là chạy được ngay).
