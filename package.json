@@ -4,16 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "concurrently -k -n api,web \"npm run server\" \"npm run dev\"",
-    "dev": "vite",
+    "start": "concurrently -k -n api,web \"node backend/server.js\" \"npm run dev\"",
+    "dev": "cd FrontEnd && vite",
     "server": "node backend/server.js",
     "db:seed": "node backend/database/seed.js",
-    "db:inspect": "node backend/database/inspectDb.js",
-    "db:import-medicines": "node backend/database/importMedicinesCsv.js",
-    "db:import-medicines-fresh": "node backend/database/importMedicinesCsv.js --fresh",
-    "build": "vite build",
+    "build": "cd FrontEnd && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "cd FrontEnd && vite preview"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -24,6 +21,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
+    "nodemailer": "^6.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.71.2",

@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken'
 import { env } from '../config/env.js'
 import { createError } from '../utils/http.js'
 
+/** Đọc JWT từ header Authorization, gắn payload vào req.user. */
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : ''
@@ -19,6 +20,7 @@ export function requireAuth(req, res, next) {
   }
 }
 
+/** Sau requireAuth: chỉ role trong danh sách (vd. admin). */
 export function allowRoles(...roles) {
   return (req, res, next) => {
     if (!roles.includes(req.user?.role)) {

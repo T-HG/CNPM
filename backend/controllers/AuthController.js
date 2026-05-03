@@ -1,6 +1,8 @@
+import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { env } from '../config/env.js'
+import { sendNewPasswordEmail } from '../utils/mailer.js'
 import {
   createEmployee,
   countEmployees,
@@ -82,14 +84,54 @@ export async function register(req, res) {
   res.status(201).json({ message: 'Đăng ký tài khoản thành công' })
 }
 
-export async function checkEmail(req, res) {
-  const { email } = req.body
+function generateTempPassword(length = 6) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  const bytes = crypto.randomBytes(length)
+  let out = ''
+  for (let i = 0; i < length; i += 1) {
+    out += chars[bytes[i] % chars.length]
+  }
+  return out
+}
+
+/** Quên mật khẩu: tạo mật khẩu mới và gửi qua email (không dùng link). */
+export async function forgotPassword(req, res) {
+  const email = String(req.body.email || '')
+    .trim()
+    .toLowerCase()
   if (!email) {
     throw createError(400, 'Email là bắt buộc')
   }
 
   const employee = await findEmployeeByLogin(email)
-  res.json({ exists: Boolean(employee) })
+  if (!employee || !employee.IsActive) {
+    throw createError(404, 'Không tìm thấy tài khoản hoạt động với email này.')
+  }
+
+  const plain = generateTempPassword(env.forgotPasswordTempLength)
+
+  let devLogOnly = false
+  try {
+    const result = await sendNewPasswordEmail({
+      to: employee.Email,
+      fullName: employee.FullName,
+      plainPassword: plain,
+    })
+    devLogOnly = Boolean(result?.devLogOnly)
+  } catch (err) {
+    const status =
+      typeof err.status === 'number' && err.status >= 400 ? err.status : 502
+    throw createError(status, err.message || 'Không gửi được email. Thử lại sau.')
+  }
+
+  const passwordHash = await bcrypt.hash(plain, 10)
+  await updateEmployeePassword(employee.EmployeeId, passwordHash)
+
+  res.json({
+    message: devLogOnly
+      ? 'Chế độ dev: mật khẩu mới được in trong console máy chủ API (chưa cấu hình SMTP).'
+      : 'Đã gửi mật khẩu mới đến email của bạn. Kiểm tra hộp thư và mục spam.',
+  })
 }
 
 export async function changePassword(req, res) {

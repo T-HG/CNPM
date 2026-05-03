@@ -1,6 +1,14 @@
 # Quản lý nhà thuốc (React + Vite + Express + SQLite)
 
-Monorepo: giao diện React và API Express dùng chung `package.json`. File database `backend/database/pharmacy.sqlite` đã được đưa vào repo — clone xong **không cần seed** trừ khi bạn muốn reset dữ liệu mẫu.
+Monorepo: giao diện React (`FrontEnd/`) và API Express (`backend/`) dùng chung `package.json`. File database `backend/database/pharmacy.sqlite` đã được đưa vào repo — clone xong **không cần seed** trừ khi bạn muốn reset dữ liệu mẫu.
+
+## Cấu trúc thư mục
+
+- **`FrontEnd/`** — Vite + React (`src/`: `models`, `views`, `controllers`, `components`, `context`).
+- **`backend/`** — Express MVC (`models`, `controllers`, `routes`, `middleware`, `config`, `utils`); **`backend/database/`** — SQLite (`pharmacy.sqlite`), `schema.sql`, `init.js`, `seed.js`; entry `backend/server.js`.
+- **`scripts/`** — tiện ích tùy chọn.
+
+Chi tiết API: [backend/README.md](backend/README.md).
 
 ## Yêu cầu
 
@@ -43,7 +51,7 @@ npm run dev
 npm run db:seed
 ```
 
-Xem thêm cấu trúc backend trong [backend/README.md](backend/README.md).
+Xem thêm cấu trúc API trong [backend/README.md](backend/README.md).
 
 ## Tài khoản mẫu
 
@@ -59,12 +67,11 @@ Xem thêm cấu trúc backend trong [backend/README.md](backend/README.md).
 | `npm start` | API + frontend dev |
 | `npm run dev` | Chỉ Vite |
 | `npm run server` | Chỉ API |
-| `npm run build` | Build production frontend (`dist/`) |
+| `npm run build` | Build production frontend vào `FrontEnd/dist/` |
 | `npm run preview` | Xem thử bản build |
 | `npm run db:seed` | Ghi lại dữ liệu mẫu vào SQLite |
-| `npm run db:inspect` | Xem nhanh nội dung DB trong terminal |
 
 ## Ghi chú khi clone sang máy khác
 
 - `sqlite3` là native module: sau `npm install`, nếu lỗi load DLL/so, chạy lại `npm install` hoặc `npm rebuild sqlite3` trên đúng OS đó.
-- Database trong repo là SQLite một file; backup định kỳ nếu dùng thật cho nghiệp vụ.
+- Database trong repo là SQLite một file (`backend/database/pharmacy.sqlite`); backup định kỳ nếu dùng thật cho nghiệp vụ.

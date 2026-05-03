@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs'
+﻿import bcrypt from 'bcryptjs'
 import { run } from '../config/database.js'
 import { initDatabase } from './init.js'
 

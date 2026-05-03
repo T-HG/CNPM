@@ -1,8 +1,6 @@
 import sqlite3 from 'sqlite3'
 import { env } from './env.js'
 
-sqlite3.verbose()
-
 const db = new sqlite3.Database(env.databaseFile)
 
 db.serialize(() => {

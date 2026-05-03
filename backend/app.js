@@ -18,6 +18,7 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, message: 'Pharmacy API is running' })
 })
 
+// REST: /api/auth (login, register, forgot-password, …), thuốc, hóa đơn, …
 app.use('/api/auth', authRoutes)
 app.use('/api/medicines', medicineRoutes)
 app.use('/api/alerts', alertRoutes)

@@ -1,0 +1,553 @@
+import { useState, useMemo } from 'react'
+import { useInventoryAlerts } from '../../context/InventoryAlertContext'
+import { useSetPageHeader } from '../../context/PageHeaderContext'
+import { getStoredUser } from '../../utils/authStorage'
+import {
+  FaSearch,
+  FaUserPlus,
+  FaTrash,
+  FaMinus,
+  FaPlus,
+  FaMoneyBillWave,
+  FaPhoneAlt,
+  FaFileInvoice,
+  FaTimes,
+  FaCartPlus,
+  FaExclamationTriangle,
+  FaCheckCircle
+} from 'react-icons/fa'
+
+function formatMoney(value) {
+  return new Intl.NumberFormat('vi-VN').format(Number(value || 0)) + ' đ'
+}
+
+/** Mã hóa đơn hiển thị trên giao diện (random; lưu DB qua addOrder). */
+const generateInvoiceId = () => `HD${Math.floor(100000 + Math.random() * 900000)}`
+
+export default function Sales() {
+  useSetPageHeader('Bán hàng tại quầy', 'Tìm kiếm sản phẩm và thanh toán nhanh chóng')
+  const { medicines: inventoryMedicines, addOrder, consumeStock } = useInventoryAlerts()
+
+  // Chuẩn hóa field hiển thị + sắp theo tên (tiếng Việt)
+  const medicines = useMemo(() => {
+    const sorted = [...inventoryMedicines].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'vi', { sensitivity: 'base' }),
+    )
+    return sorted.map((item) => ({
+      ...item,
+      price: Number(item.salePrice || item.price || 0),
+      category: item.category || 'Khác',
+      ingredient: item.ingredient || 'Chưa cập nhật',
+      usage: item.usage || 'Chưa cập nhật',
+    }))
+  }, [inventoryMedicines])
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [cart, setCart] = useState([])
+
+  // Thông tin hóa đơn / khách (bắt buộc khi thanh toán)
+  const [invoiceId, setInvoiceId] = useState(generateInvoiceId())
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [customerErrors, setCustomerErrors] = useState({ name: '', phone: '' })
+
+  const [selectedMedicine, setSelectedMedicine] = useState(null)
+
+  // Popup thay alert/confirm native: alert | confirm | success
+  const [dialog, setDialog] = useState({
+    isOpen: false,
+    type: 'alert',
+    title: '',
+    message: '',
+    onConfirm: null,
+  })
+
+  const showAlert = (title, message) => {
+    setDialog({ isOpen: true, type: 'alert', title, message, onConfirm: null })
+  }
+
+  const showSuccess = (title, message, onConfirmCallback) => {
+    setDialog({ isOpen: true, type: 'success', title, message, onConfirm: onConfirmCallback })
+  }
+
+  const showConfirm = (title, message, onConfirmCallback) => {
+    setDialog({ isOpen: true, type: 'confirm', title, message, onConfirm: onConfirmCallback })
+  }
+
+  const closeDialog = () => {
+    setDialog((prev) => ({ ...prev, isOpen: false }))
+  }
+
+  const filteredMedicines = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase()
+    if (!keyword) return medicines
+    return medicines.filter((med) => {
+      const name = (med.name || '').toLowerCase()
+      const id = (med.id || '').toLowerCase()
+      const ingredient = (med.ingredient || '').toLowerCase()
+      const drugCode = (med.drugCode || '').toLowerCase()
+      return (
+        name.includes(keyword) ||
+        id.includes(keyword) ||
+        ingredient.includes(keyword) ||
+        drugCode.includes(keyword)
+      )
+    })
+  }, [searchQuery, medicines])
+
+  // Tổng SL đã đặt trong giỏ theo từng thuốc (để trừ tạm tồn hiển thị)
+  const cartQtyByMedicine = useMemo(() => {
+    return cart.reduce((acc, item) => {
+      acc[item.id] = (acc[item.id] || 0) + (Number(item.qty) || 0)
+      return acc
+    }, {})
+  }, [cart])
+
+  /** Tồn còn lại sau khi trừ phần đang nằm trong giỏ. */
+  const getAvailableStock = (medicineId, baseStock) => {
+    const reserved = cartQtyByMedicine[medicineId] || 0
+    return Math.max(0, Number(baseStock || 0) - reserved)
+  }
+
+  const handleAddToCart = (med) => {
+    const availableStock = getAvailableStock(med.id, med.stock)
+    if (availableStock <= 0) {
+      showAlert('Hết hàng', `${med.name} hiện không còn tồn kho.`)
+      return
+    }
+
+    setCart((prev) => {
+      const existingItem = prev.find((item) => item.id === med.id)
+      if (existingItem) {
+        const nextQty = (Number(existingItem.qty) || 0) + 1
+        if (nextQty > Number(med.stock || 0)) {
+          showAlert('Không đủ tồn kho', `${med.name} chỉ còn ${med.stock} ${med.unit} trong kho.`)
+          return prev
+        }
+        return prev.map((item) =>
+          item.id === med.id ? { ...item, qty: nextQty } : item
+        )
+      }
+      return [...prev, { ...med, qty: 1 }]
+    })
+    setSelectedMedicine(null)
+  }
+
+  const handleUpdateQty = (id, newQty) => {
+    const medicine = medicines.find((m) => m.id === id)
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          if (newQty === '') return { ...item, qty: '' }
+          const parsed = parseInt(newQty, 10)
+          if (isNaN(parsed) || parsed < 1) return item
+          if (medicine && parsed > Number(medicine.stock || 0)) {
+            showAlert(
+              'Không đủ tồn kho',
+              `${medicine.name} chỉ còn ${medicine.stock} ${medicine.unit} trong kho.`,
+            )
+            return item
+          }
+          return { ...item, qty: parsed }
+        }
+        return item
+      })
+    )
+  }
+
+  const handleRemoveItem = (id) => {
+    setCart((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  const resetForm = () => {
+    setCart([])
+    setCustomerName('')
+    setCustomerPhone('')
+    setCustomerErrors({ name: '', phone: '' })
+    setInvoiceId(generateInvoiceId())
+  }
+
+  const handleClearCart = () => {
+    showConfirm(
+      'Hủy đơn hàng',
+      'Bạn có chắc chắn muốn hủy đơn hàng hiện tại? Toàn bộ sản phẩm trong giỏ sẽ bị xóa.',
+      () => {
+        resetForm()
+        closeDialog()
+      }
+    )
+  }
+
+  /** Kiểm tra khách → trừ tồn cục bộ → POST hóa đơn → popup thành công. */
+  const handleCheckout = async () => {
+    if (cart.length === 0) {
+      showAlert('Cảnh báo', 'Giỏ hàng đang trống! Vui lòng chọn sản phẩm trước khi thanh toán.')
+      return
+    }
+    const finalCustomer = customerName.trim()
+    const finalPhone = customerPhone.trim()
+
+    if (!finalCustomer || !finalPhone) {
+      setCustomerErrors({
+        name: finalCustomer ? '' : 'Tên khách hàng không được để trống',
+        phone: finalPhone ? '' : 'Số điện thoại không được để trống',
+      })
+      return
+    }
+
+    setCustomerErrors({ name: '', phone: '' })
+
+    const currentUser = getStoredUser()
+    const orderItems = cart.map((item) => ({
+      id: item.id,
+      name: item.name,
+      unit: item.unit,
+      qty: Number(item.qty) || 0,
+      price: Number(item.price) || 0,
+      total: (Number(item.qty) || 0) * (Number(item.price) || 0),
+    }))
+
+    const stockResult = consumeStock(orderItems)
+    if (!stockResult.ok) {
+      const detail = stockResult.shortages
+        .map((item) => `${item.name}: cần ${item.requested}, còn ${item.available}`)
+        .join('\n')
+      showAlert('Không đủ tồn kho để thanh toán', detail)
+      return
+    }
+
+    try {
+      await addOrder({
+        id: invoiceId,
+        employeeId: currentUser?.employeeId,
+        customerName: finalCustomer,
+        phone: finalPhone,
+        total: totalPrice,
+        status: 'Hoàn thành',
+        createdBy: currentUser?.name || 'Nhân viên',
+        createdAt: new Date().toISOString(),
+        items: orderItems,
+      })
+    } catch (error) {
+      showAlert(
+        'Thanh toán thất bại',
+        error?.response?.data?.message || 'Không thể lưu hóa đơn vào database.',
+      )
+      return
+    }
+
+    const billDetails = `Hóa đơn: ${invoiceId}\nKhách hàng: ${finalCustomer}\nSố điện thoại: ${finalPhone}\nTổng tiền thanh toán: ${formatMoney(totalPrice)}`
+
+    showSuccess(
+      'Thanh toán thành công!',
+      billDetails,
+      () => {
+        resetForm()
+        closeDialog()
+      }
+    )
+  }
+
+  const totalItems = cart.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
+  const totalPrice = cart.reduce((sum, item) => sum + item.price * (Number(item.qty) || 0), 0)
+
+  return (
+    <div className="w-full space-y-4 pt-0 animate-in fade-in duration-300">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 xl:grid-cols-4">
+        {/* Cột trái: tìm kiếm + lưới thuốc */}
+        <div className="space-y-4 lg:col-span-2 xl:col-span-3">
+          <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100">
+            <FaSearch className="text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tìm theo tên, mã, số đăng ký hoặc thành phần..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-transparent text-sm text-slate-700 outline-none"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+            {filteredMedicines.length > 0 ? (
+              filteredMedicines.map((med) => {
+                const availableStock = getAvailableStock(med.id, med.stock)
+
+                return (
+                  <div
+                    key={med.id}
+                    onClick={() => setSelectedMedicine(med)}
+                    className={`relative flex cursor-pointer flex-col justify-between overflow-hidden rounded-2xl bg-white p-4 shadow-sm ring-1 transition select-none ${
+                      availableStock > 0
+                        ? 'ring-slate-100 hover:shadow-md hover:ring-blue-400'
+                        : 'ring-red-100 opacity-75'
+                    }`}
+                  >
+                    <div>
+                      <span className="mb-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                        {med.category}
+                      </span>
+                      <h3 className="text-sm font-bold text-slate-800 line-clamp-2">{med.name}</h3>
+                    </div>
+
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <p className="text-xs text-slate-500">Kho: {availableStock} {med.unit}</p>
+                        <p className="text-base font-bold text-blue-600">{formatMoney(med.price)}</p>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation() // không mở modal khi bấm thêm giỏ
+                          handleAddToCart(med)
+                        }}
+                        disabled={availableStock <= 0}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300"
+                        title="Thêm vào giỏ"
+                      >
+                        <FaCartPlus size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="col-span-full py-10 text-center text-slate-400">Không có thuốc phù hợp</div>
+            )}
+          </div>
+        </div>
+
+        {/* Cột phải: giỏ / thanh toán */}
+        <div className="flex flex-col overflow-hidden rounded-[24px] bg-white shadow-xl ring-1 ring-slate-100 lg:col-span-1 h-[calc(100vh-140px)] min-h-[620px] sticky top-6">
+          <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-slate-800">
+                <FaFileInvoice className="text-blue-600" />
+                <h2 className="font-bold">{invoiceId}</h2>
+              </div>
+              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+                {totalItems} SP
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <div className={`flex items-center gap-2 rounded-xl border bg-white px-3 py-2 ${
+                  customerErrors.name ? 'border-red-500' : 'border-slate-200'
+                }`}>
+                  <FaUserPlus className="text-slate-400 shrink-0" size={14} />
+                  <input 
+                    type="text" 
+                    placeholder="Tên khách hàng *"
+                    value={customerName} 
+                    onChange={(e) => {
+                      setCustomerName(e.target.value)
+                      if (customerErrors.name) {
+                        setCustomerErrors((prev) => ({ ...prev, name: '' }))
+                      }
+                    }}
+                    required
+                    className="w-full outline-none text-sm text-slate-700 font-medium placeholder-slate-400"
+                  />
+                </div>
+                {customerErrors.name && (
+                  <p className="mt-1 text-sm text-red-500">{customerErrors.name}</p>
+                )}
+              </div>
+              <div>
+                <div className={`flex items-center gap-2 rounded-xl border bg-white px-3 py-2 ${
+                  customerErrors.phone ? 'border-red-500' : 'border-slate-200'
+                }`}>
+                  <FaPhoneAlt className="text-slate-400 shrink-0" size={14} />
+                  <input 
+                    type="tel" 
+                    placeholder="Số điện thoại *"
+                    value={customerPhone} 
+                    onChange={(e) => {
+                      setCustomerPhone(e.target.value)
+                      if (customerErrors.phone) {
+                        setCustomerErrors((prev) => ({ ...prev, phone: '' }))
+                      }
+                    }}
+                    required
+                    className="w-full outline-none text-sm text-slate-700 font-medium placeholder-slate-400"
+                  />
+                </div>
+                {customerErrors.phone && (
+                  <p className="mt-1 text-sm text-red-500">{customerErrors.phone}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="custom-scrollbar flex-1 overflow-y-auto p-2">
+            {cart.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-center text-slate-400 p-4">
+                <p className="text-sm italic">Bấm vào nút <FaCartPlus className="inline mx-1 text-blue-400"/> ở sản phẩm để thêm vào hóa đơn</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {cart.map((item) => (
+                  <div key={item.id} className="relative rounded-xl border border-slate-100 p-3 hover:bg-slate-50 transition">
+                    <div className="flex justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-800 leading-tight">{item.name}</h4>
+                      <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-500 shrink-0">
+                        <FaTrash size={12} />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-sm font-bold text-blue-600">{formatMoney(item.price)}</p>
+                      <div className="flex items-center rounded-lg border border-slate-200 bg-white px-1">
+                        <button onClick={() => handleUpdateQty(item.id, (Number(item.qty) || 0) - 1)} className="p-1.5 text-slate-500 hover:bg-slate-100 transition rounded-md"><FaMinus size={10} /></button>
+                        
+                        <input 
+                          type="number" 
+                          value={item.qty} 
+                          onChange={(e) => handleUpdateQty(item.id, e.target.value)}
+                          onBlur={() => {
+                            if (item.qty === '') handleUpdateQty(item.id, 1)
+                          }}
+                          className="w-8 bg-transparent text-center text-sm font-semibold outline-none" 
+                        />
+                        
+                        <span className="text-[13px] font-medium text-slate-500 pr-1 select-none">{item.unit}</span>
+
+                        <button onClick={() => handleUpdateQty(item.id, (Number(item.qty) || 0) + 1)} className="p-1.5 text-slate-500 hover:bg-slate-100 transition rounded-md"><FaPlus size={10} /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-100 bg-white p-5">
+            <div className="mb-4 space-y-2 text-sm text-slate-600">
+              <div className="flex justify-between font-bold text-lg text-slate-900 border-t border-dashed border-slate-200 pt-2">
+                <span>Tổng cộng:</span>
+                <span className="text-blue-600">{formatMoney(totalPrice)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={handleClearCart} disabled={cart.length === 0} className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 transition">Hủy</button>
+              <button onClick={handleCheckout} disabled={cart.length === 0} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-base font-bold text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 disabled:bg-slate-300 disabled:shadow-none transition">
+                <FaMoneyBillWave /> Thanh toán
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Xem nhanh mô tả thuốc (bấm thẻ sản phẩm) */}
+      {selectedMedicine && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-900">Chi tiết sản phẩm</h2>
+              <button
+                onClick={() => setSelectedMedicine(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition hover:bg-red-50 hover:text-red-600"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-blue-700">{selectedMedicine.name}</h3>
+                  <p className="mt-1 text-sm text-slate-500">Mã: {selectedMedicine.id}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-slate-900">{formatMoney(selectedMedicine.price)}</p>
+                  <p className="text-sm font-medium text-emerald-600">
+                    Kho: {getAvailableStock(selectedMedicine.id, selectedMedicine.stock)} {selectedMedicine.unit}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
+                <div>
+                  <span className="mb-1 block font-bold text-slate-900">Danh mục</span>
+                  <span className="inline-block rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+                    {selectedMedicine.category}
+                  </span>
+                </div>
+                <div>
+                  <span className="mb-1 block font-bold text-slate-900">Thành phần chính</span>
+                  <p className="leading-relaxed text-slate-600">{selectedMedicine.ingredient}</p>
+                </div>
+                <div>
+                  <span className="mb-1 block font-bold text-slate-900">Công dụng / Chỉ định</span>
+                  <p className="leading-relaxed text-slate-600">{selectedMedicine.usage}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thông báo tùy chỉnh (thay window.alert) */}
+      {dialog.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-sm overflow-hidden rounded-[24px] bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div 
+                className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
+                  dialog.type === 'success' 
+                    ? 'bg-emerald-100 text-emerald-600' 
+                    : dialog.type === 'confirm' 
+                      ? 'bg-red-100 text-red-600' 
+                      : 'bg-yellow-100 text-yellow-600'
+                }`}
+              >
+                {dialog.type === 'success' ? <FaCheckCircle size={32} /> : <FaExclamationTriangle size={28} />}
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">{dialog.title}</h3>
+              <p className="mt-3 text-sm text-slate-500 leading-relaxed whitespace-pre-line text-left bg-slate-50 p-3 rounded-xl border border-slate-100 inline-block w-full">
+                {dialog.message}
+              </p>
+            </div>
+
+            <div className="flex gap-3 bg-slate-50 p-4">
+              {dialog.type === 'confirm' ? (
+                <>
+                  <button onClick={closeDialog} className="flex-1 rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition">
+                    Bỏ qua
+                  </button>
+                  <button onClick={dialog.onConfirm} className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-red-700 transition">
+                    Hủy đơn
+                  </button>
+                </>
+              ) : dialog.type === 'success' ? (
+                <button onClick={dialog.onConfirm || closeDialog} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition">
+                  Hoàn tất
+                </button>
+              ) : (
+                <button onClick={closeDialog} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 transition">
+                  Đã hiểu
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+        /* Ẩn mũi tên tăng/giảm mặc định của ô số lượng */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
+    </div>
+  )
+}

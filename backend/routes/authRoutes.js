@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import {
   changePassword,
-  checkEmail,
+  forgotPassword,
   login,
   register,
   updateProfile,
@@ -11,9 +11,11 @@ import { asyncHandler } from '../utils/http.js'
 
 const router = Router()
 
+// Công khai
 router.post('/login', asyncHandler(login))
 router.post('/register', asyncHandler(register))
-router.post('/check-email', asyncHandler(checkEmail))
+router.post('/forgot-password', asyncHandler(forgotPassword))
+// Cần Bearer token
 router.patch('/profile', requireAuth, asyncHandler(updateProfile))
 router.post('/change-password', requireAuth, asyncHandler(changePassword))
 
