@@ -4,6 +4,7 @@ import {
   getCategories,
   getMedicine,
   getMedicines,
+  patchMedicine,
   patchMedicineStock,
   postCategory,
   postMedicine,
@@ -17,6 +18,7 @@ router.post('/categories', asyncHandler(postCategory))
 router.get('/', asyncHandler(getMedicines))
 router.post('/', asyncHandler(postMedicine))
 router.patch('/:id/stock', asyncHandler(patchMedicineStock))
+router.patch('/:id', asyncHandler(patchMedicine))
 router.post('/:id/delete', asyncHandler(deleteMedicine))
 router.get('/:id', asyncHandler(getMedicine))
 

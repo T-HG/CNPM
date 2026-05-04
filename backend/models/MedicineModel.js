@@ -87,6 +87,43 @@ export async function createMedicine(payload) {
   return findMedicine(payload.id)
 }
 
+export async function updateMedicine(medicineId, payload) {
+  const existing = await findMedicine(medicineId)
+  if (!existing) return null
+  await run(
+    `UPDATE Medicine SET
+      MedicineName = ?,
+      CategoryId = ?,
+      ProductType = ?,
+      UnitName = ?,
+      DrugRegistrationCode = ?,
+      CostPrice = ?,
+      SalePrice = ?,
+      Ingredient = ?,
+      Usage = ?,
+      Dosage = ?
+     WHERE MedicineId = ?`,
+    [
+      payload.name,
+      payload.categoryId || null,
+      payload.type,
+      payload.unit,
+      payload.drugCode || '',
+      Number(payload.costPrice || 0),
+      Number(payload.salePrice || 0),
+      payload.ingredient || '',
+      payload.usage || '',
+      payload.dosage || '',
+      medicineId,
+    ],
+  )
+  await run('UPDATE MedicineStock SET QuantityOnHand = ? WHERE MedicineId = ?', [
+    Number(payload.stock ?? 0),
+    medicineId,
+  ])
+  return findMedicine(medicineId)
+}
+
 export async function updateStock(medicineId, quantityOnHand) {
   await run('UPDATE MedicineStock SET QuantityOnHand = ? WHERE MedicineId = ?', [
     Number(quantityOnHand || 0),

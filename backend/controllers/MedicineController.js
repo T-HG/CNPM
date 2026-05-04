@@ -7,6 +7,7 @@ import {
   listCategories,
   listMedicines,
   removeMedicine,
+  updateMedicine,
   updateStock,
 } from '../models/MedicineModel.js'
 import { createError } from '../utils/http.js'
@@ -49,8 +50,10 @@ export async function postMedicine(req, res) {
 
   const dupId = await findMedicineIdByNameAndUnit(name, unit)
   if (dupId) {
-    if (addQty > 0) await increaseStock(dupId, addQty)
-    return res.status(200).json(await findMedicine(dupId))
+    throw createError(
+      409,
+      'Đã có thuốc trùng tên và đơn vị đóng gói. Vui lòng đổi tên hoặc đơn vị, hoặc cập nhật trên dòng thuốc hiện có.',
+    )
   }
 
   const payload = {
@@ -76,6 +79,47 @@ export async function patchMedicineStock(req, res) {
   const medicine = await updateStock(req.params.id, nextStock)
   if (!medicine) throw createError(404, 'Không tìm thấy thuốc')
   res.json(medicine)
+}
+
+export async function patchMedicine(req, res) {
+  const existing = await findMedicine(req.params.id)
+  if (!existing) throw createError(404, 'Không tìm thấy thuốc')
+
+  const body = req.body
+  const name = (body.name || '').trim()
+  if (!name) {
+    throw createError(400, 'Tên thuốc là bắt buộc')
+  }
+
+  const type = body.type || 'Thuốc không kê đơn'
+  const unit = (body.unit || 'Viên').trim() || 'Viên'
+  const stock = Number(body.stock ?? 0)
+  if (Number.isNaN(stock) || stock < 0) {
+    throw createError(400, 'Số lượng tồn không hợp lệ')
+  }
+
+  const dupId = await findMedicineIdByNameAndUnit(name, unit)
+  if (dupId && dupId !== req.params.id) {
+    throw createError(
+      409,
+      'Tên thuốc và đơn vị đóng gói trùng với một thuốc khác trong hệ thống.',
+    )
+  }
+
+  const updated = await updateMedicine(req.params.id, {
+    name,
+    type,
+    unit,
+    categoryId: body.categoryId ?? null,
+    drugCode: body.drugCode || '',
+    costPrice: body.costPrice,
+    salePrice: body.salePrice ?? body.price,
+    stock,
+    ingredient: body.ingredient,
+    usage: body.usage,
+    dosage: body.dosage,
+  })
+  res.json(updated)
 }
 
 export async function deleteMedicine(req, res) {

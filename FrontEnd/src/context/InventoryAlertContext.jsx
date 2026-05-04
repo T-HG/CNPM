@@ -240,6 +240,15 @@ export function InventoryAlertProvider({ children }) {
     [refreshData],
   )
 
+  const updateMedicine = useCallback(
+    async (medicineId, payload) => {
+      const response = await api.patch(`/medicines/${encodeURIComponent(medicineId)}`, payload)
+      await refreshData()
+      return response.data
+    },
+    [refreshData],
+  )
+
   const updateEmployeeRole = useCallback(
     async (employeeId, nextRole) => {
       await api.patch(`/employees/${employeeId}/role`, { role: nextRole })
@@ -296,6 +305,7 @@ export function InventoryAlertProvider({ children }) {
       consumeStock,
       updateOrderStatus,
       addMedicine,
+      updateMedicine,
       updateEmployeeRole,
       toggleEmployeeStatus,
       formatDateTime,
@@ -324,6 +334,7 @@ export function InventoryAlertProvider({ children }) {
       consumeStock,
       updateOrderStatus,
       addMedicine,
+      updateMedicine,
       updateEmployeeRole,
       toggleEmployeeStatus,
       deleteMedicine,

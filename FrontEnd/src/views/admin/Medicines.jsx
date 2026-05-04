@@ -23,11 +23,14 @@ export default function Medicines() {
     'Quản lý danh mục thuốc, tồn kho, giá bán và thông tin chi tiết',
   )
 
-  const { medicines, medicineCategories, addMedicine, deleteMedicine } = useInventoryAlerts()
+  const { medicines, medicineCategories, addMedicine, updateMedicine, deleteMedicine } =
+    useInventoryAlerts()
   const [search, setSearch] = useState('')
   const [selectedTypes] = useState([])
   const [selectedGroup, setSelectedGroup] = useState(ALL_GROUP_OPTION)
   const [showModal, setShowModal] = useState(false)
+  /** Đang sửa thuốc có sẵn (mã hàng); null = form thêm mới */
+  const [editingId, setEditingId] = useState(null)
 
   const [deleteConfirm, setDeleteConfirm] = useState({
     isOpen: false,
@@ -86,9 +89,9 @@ export default function Medicines() {
     setSelectedGroup((prev) => (prev === group ? ALL_GROUP_OPTION : group))
   }
 
-  const handleCloseModal = () => {
-    setShowModal(false)
-    setActiveTab('info') // Reset tab về mặc định
+  const resetFormState = () => {
+    setActiveTab('info')
+    setEditingId(null)
     setFormData({
       code: '',
       barcode: '',
@@ -110,6 +113,46 @@ export default function Medicines() {
     })
   }
 
+  const handleCloseModal = () => {
+    setShowModal(false)
+    resetFormState()
+  }
+
+  const openCreateModal = () => {
+    resetFormState()
+    setShowModal(true)
+  }
+
+  const openEditModal = (item) => {
+    setEditingId(item.id)
+    setActiveTab('info')
+    setFormData({
+      code: item.id || '',
+      barcode: '',
+      name: item.name || '',
+      drugCode: item.drugCode || '',
+      type: item.type || 'Thuốc không kê đơn',
+      group: item.category || '',
+      unit: item.unit || '',
+      route: '',
+      location: '',
+      costPrice: item.costPrice != null ? String(item.costPrice) : '',
+      salePrice:
+        item.salePrice != null
+          ? String(item.salePrice)
+          : item.price != null
+            ? String(item.price)
+            : '',
+      stock: item.stock != null ? String(item.stock) : '',
+      weight: '',
+      directSale: true,
+      ingredient: item.ingredient || '',
+      usage: item.usage || '',
+      dosage: item.dosage || '',
+    })
+    setShowModal(true)
+  }
+
   const handleChangeForm = (field, value) => {
     setFormData((prev) => ({
       ...prev,
@@ -125,41 +168,62 @@ export default function Medicines() {
       return
     }
 
-    const newItem = {
-      ...(formData.code?.trim() ? { id: formData.code.trim() } : {}),
+    const categoryId = medicineCategories.find((item) => item.name === formData.group)?.id || null
+    const payloadApi = {
       name: formData.name,
       unit: formData.unit || 'Chưa xác định',
       type: formData.type,
-      categoryId: medicineCategories.find((item) => item.name === formData.group)?.id || null,
-      category: formData.group || 'Chưa phân nhóm',
+      categoryId,
+      drugCode: formData.drugCode,
       costPrice: Number(formData.costPrice || 0),
-      price: Number(formData.salePrice || 0),
       salePrice: Number(formData.salePrice || 0),
       stock: Number(formData.stock || 0),
-      minStock: 10,
-      directSale: formData.directSale,
-      group: formData.group,
-      route: formData.route,
-      location: formData.location,
-      drugCode: formData.drugCode,
       ingredient: formData.ingredient,
       usage: formData.usage,
       dosage: formData.dosage,
-      supplierName: 'Chưa cập nhật',
-      lastImportPrice: Number(formData.costPrice || 0),
-      avgSold7d: 0,
-      avgSold30d: 0,
-      alertStatus: 'NONE',
-      alertNote: '',
-      alertBy: '',
-      alertAt: '',
     }
 
     try {
-      await addMedicine(newItem)
+      if (editingId) {
+        await updateMedicine(editingId, payloadApi)
+      } else {
+        const newItem = {
+          ...(formData.code?.trim() ? { id: formData.code.trim() } : {}),
+          name: formData.name,
+          unit: payloadApi.unit,
+          type: formData.type,
+          categoryId,
+          category: formData.group || 'Chưa phân nhóm',
+          costPrice: payloadApi.costPrice,
+          price: payloadApi.salePrice,
+          salePrice: payloadApi.salePrice,
+          stock: payloadApi.stock,
+          minStock: 10,
+          directSale: formData.directSale,
+          group: formData.group,
+          route: formData.route,
+          location: formData.location,
+          drugCode: formData.drugCode,
+          ingredient: formData.ingredient,
+          usage: formData.usage,
+          dosage: formData.dosage,
+          supplierName: 'Chưa cập nhật',
+          lastImportPrice: Number(formData.costPrice || 0),
+          avgSold7d: 0,
+          avgSold30d: 0,
+          alertStatus: 'NONE',
+          alertNote: '',
+          alertBy: '',
+          alertAt: '',
+        }
+        await addMedicine(newItem)
+      }
       handleCloseModal()
     } catch (error) {
-      alert(error?.response?.data?.message || 'Không thể lưu thuốc vào database')
+      alert(
+        error?.response?.data?.message ||
+          (editingId ? 'Không thể cập nhật thuốc' : 'Không thể lưu thuốc vào database'),
+      )
     }
   }
 
@@ -286,7 +350,8 @@ export default function Medicines() {
 
             <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={() => setShowModal(true)}
+                type="button"
+                onClick={openCreateModal}
                 className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/30 transition"
               >
                 <FaPlus />
@@ -321,7 +386,19 @@ export default function Medicines() {
               <tbody>
                 {filteredMedicines.length > 0 ? (
                   filteredMedicines.map((item) => (
-                    <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50 transition">
+                    <tr
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openEditModal(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          openEditModal(item)
+                        }
+                      }}
+                      className="border-t border-slate-100 transition hover:bg-slate-50 cursor-pointer"
+                    >
                       <td className="p-4 font-semibold text-slate-800">{item.id}</td>
                       <td className="p-4 text-slate-700 font-medium">{item.name}</td>
                       <td className="p-4 text-slate-600">{item.unit}</td>
@@ -343,9 +420,10 @@ export default function Medicines() {
                       <td className="p-4 text-center">
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.stopPropagation()
                             setDeleteConfirm({ isOpen: true, id: item.id, name: item.name })
-                          }
+                          }}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-50"
                           title="Xóa khỏi danh mục"
                         >
@@ -386,9 +464,13 @@ export default function Medicines() {
           <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-[28px] bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 shrink-0">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Thêm thuốc mới</h2>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {editingId ? 'Cập nhật thuốc' : 'Thêm thuốc mới'}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Nhập thông tin thuốc, giá bán và thông tin phân loại
+                  {editingId
+                    ? 'Chỉnh sửa thông tin thuốc, giá bán và phân loại'
+                    : 'Nhập thông tin thuốc, giá bán và thông tin phân loại'}
                 </p>
               </div>
 
@@ -435,6 +517,16 @@ export default function Medicines() {
                   <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
                     {/* LEFT */}
                     <div className="space-y-6">
+                      {editingId && (
+                        <FormRow label="Mã hàng">
+                          <input
+                            readOnly
+                            value={formData.code}
+                            className="input-line cursor-not-allowed bg-slate-50/80 text-slate-600"
+                          />
+                        </FormRow>
+                      )}
+
                       <FormRow label="Tên thuốc (*)">
                         <input
                           value={formData.name}
@@ -583,7 +675,7 @@ export default function Medicines() {
                 form="medicineForm" // Liên kết nút ngoài form vào form bằng ID
                 className="rounded-2xl bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/30"
               >
-                Lưu thuốc
+                {editingId ? 'Cập nhật' : 'Lưu thuốc'}
               </button>
             </div>
           </div>
